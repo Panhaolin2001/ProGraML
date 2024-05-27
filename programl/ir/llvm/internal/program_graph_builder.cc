@@ -27,6 +27,7 @@
 #include "llvm/IR/CFG.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Instruction.h"
+#include "llvm/IR/ProfDataUtils.h"
 #include "llvm/IR/Instructions.h"
 #if PROGRAML_LLVM_VERSION_MAJOR > 3
 #include "llvm/IR/ProfileSummary.h"
@@ -312,7 +313,7 @@ Node* ProgramGraphBuilder::AddLlvmInstruction(const ::llvm::Instruction* instruc
   }
   uint64_t profTrueWeight;
   uint64_t profFalseWeight;
-  if (instruction->extractProfMetadata(profTrueWeight, profFalseWeight)) {
+  if (::llvm::extractBranchWeights(*instruction, profTrueWeight, profFalseWeight)) {
     graph::AddScalarFeature(node, "llvm_profile_true_weight", profTrueWeight);
     graph::AddScalarFeature(node, "llvm_profile_false_weight", profFalseWeight);
   }
@@ -413,11 +414,11 @@ Node* ProgramGraphBuilder::AddLlvmType(const ::llvm::PointerType* type) {
   Node* node = AddType("*");
   graph::AddScalarFeature(node, "full_text", textEncoder_.Encode(type).text);
 
-  auto elementType = type->getElementType();
+  auto elementType = type->getPointerElementType();
   auto parent = compositeTypeParts_.find(elementType);
   if (parent == compositeTypeParts_.end()) {
     // Re-use the type if it already exists to prevent duplication.
-    auto elementNode = GetOrCreateType(type->getElementType());
+    auto elementNode = GetOrCreateType(type->getPointerElementType());
     CHECK(AddTypeEdge(/*position=*/0, elementNode, node).ok());
   } else {
     // Bottom-out for self-referencing types.
@@ -475,14 +476,14 @@ labm8::StatusOr<ProgramGraph> ProgramGraphBuilder::Build(const ::llvm::Module& m
 
   for (const ::llvm::Function& function : module) {
     // Create the function message.
-    Function* functionMessage = AddFunction(function.getName(), moduleMessage);
+    Function* functionMessage = AddFunction(function.getName().str(), moduleMessage);
 
 #if PROGRAML_LLVM_VERSION_MAJOR > 6
     // Add profiling information, if available.
     if (function.hasProfileData()) {
       auto profileCount = function.getEntryCount();
       Feature feature;
-      feature.mutable_int64_list()->add_value(profileCount.getCount());
+      feature.mutable_int64_list()->add_value(profileCount->getCount());
       functionMessage->mutable_features()->mutable_feature()->insert(
           {"llvm_profile_entry_count", feature});
     }

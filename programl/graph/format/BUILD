@@ -82,5 +82,6 @@ cc_library(
         "@labm8//labm8/cpp:status",
         "@labm8//labm8/cpp:status_macros",
         "@nlohmann_json//:json",
+        "//programl/graph:features",
     ],
 )
